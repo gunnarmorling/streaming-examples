@@ -1,0 +1,25 @@
+{
+    "name": "inventory-connector-flat",
+    "config": {
+        "connector.class": "io.debezium.connector.postgresql.PostgresConnector",
+        "tasks.max": "1",
+        "database.hostname": "postgres",
+        "database.port": "5432",
+        "database.user": "postgres",
+        "database.password": "postgres",
+        "database.dbname" : "postgres",
+        "topic.prefix": "dbserver2",
+        "schema.include.list": "inventory",
+        "slot.name" : "dbserver2",
+        "plugin.name" : "pgoutput",
+
+        "transforms" : "unwrap",
+        "transforms.unwrap.type" : "io.debezium.transforms.ExtractNewRecordState",
+        "transforms.unwrap.drop.tombstones" : "false",
+
+        "key.converter" : "org.apache.kafka.connect.json.JsonConverter",
+        "key.converter.schemas.enable" : "false",
+        "value.converter" : "org.apache.kafka.connect.json.JsonConverter",
+        "value.converter.schemas.enable" : "false"
+    }
+}
