@@ -1,0 +1,27 @@
+{
+    "name": "inventory-connector-with-reselect",
+    "config": {
+        "connector.class": "io.debezium.connector.postgresql.PostgresConnector",
+        "tasks.max": "1",
+        "database.hostname": "postgres",
+        "database.port": "5432",
+        "database.user": "postgres",
+        "database.password": "postgres",
+        "database.dbname" : "postgres",
+        "schema.include.list": "inventory",
+        "plugin.name" : "pgoutput",
+        "topic.prefix": "dbserver1",
+        "slot.name" : "dbserver1",
+
+        "key.converter" : "org.apache.kafka.connect.json.JsonConverter",
+        "key.converter.schemas.enable" : "false",
+        "value.converter" : "org.apache.kafka.connect.json.JsonConverter",
+        "value.converter.schemas.enable" : "false",
+
+        "post.processors": "reselector",
+        "reselector.type": "io.debezium.processors.reselect.ReselectColumnsPostProcessor",
+        "reselector.reselect.columns.include.list": "inventory.authors:biography",
+        "reselector.reselect.unavailable.values": "true",
+        "reselector.reselect.null.values" : "false"
+    }
+}
