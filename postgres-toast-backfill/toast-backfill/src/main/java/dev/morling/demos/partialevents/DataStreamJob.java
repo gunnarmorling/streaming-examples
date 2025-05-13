@@ -33,7 +33,7 @@ public class DataStreamJob {
 	private static final String KAFKA_BROKER = "localhost:9092";
 
 	public static void main(String[] args) throws Exception {
-		final StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+		StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
 
 		KafkaSource<KafkaRecord> source = KafkaSource.<KafkaRecord>builder().setBootstrapServers(KAFKA_BROKER)
 				.setTopics("dbserver2.inventory.authors").setGroupId("my-group")
@@ -51,20 +51,26 @@ public class DataStreamJob {
 			.keyBy(k -> {
 				return Long.valueOf((Integer) k.key().get("id"));
 			})
-			.process(new ToastBackfillFunction())
+			.process(new ToastBackfillFunction("biography"))
 			.sinkTo(sink);
 
-		env.execute("Flink Java API Skeleton");
+		env.execute("Flink TOAST Backfill");
 	}
 
 	private static class ToastBackfillFunction extends KeyedProcessFunction<Long, KafkaRecord, KafkaRecord> {
 
 		private static final String UNCHANGED_TOAST_VALUE = "__debezium_unavailable_value";
+
+		private final String fieldName;
 		private ValueStateDescriptor<String> descriptor;
+
+		public ToastBackfillFunction(String toastFieldName) {
+			this.fieldName = toastFieldName;
+		}
 
 		@Override
 		public void open(OpenContext openContext) throws Exception {
-			descriptor = new ValueStateDescriptor<String>("biographies", String.class);
+			descriptor = new ValueStateDescriptor<String>(fieldName, String.class);
 		}
 
 		@Override
@@ -75,17 +81,19 @@ public class DataStreamJob {
 			Map<String, Object> newRowState = (Map<String, Object>) in.value().get("after");
 
 			switch ((String)in.value().get("op")) {
-				case "r", "i" -> state.update((String) newRowState.get("biography"));
+				case "r", "i" -> state.update((String) newRowState.get(fieldName));
 
 				case "u" -> {
-					if (UNCHANGED_TOAST_VALUE.equals(newRowState.get("biography"))) {
-						newRowState.put("biography", state.value());
+					if (UNCHANGED_TOAST_VALUE.equals(newRowState.get(fieldName))) {
+						newRowState.put(fieldName, state.value());
 					} else {
-						state.update((String) newRowState.get("biography"));
+						state.update((String) newRowState.get(fieldName));
 					}
 				}
 
-				case "d" -> {}
+				case "d" -> {
+					state.clear();
+				}
 			}
 
 			out.collect(in);

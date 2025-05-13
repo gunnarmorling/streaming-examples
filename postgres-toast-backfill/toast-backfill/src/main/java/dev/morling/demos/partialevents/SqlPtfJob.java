@@ -11,8 +11,6 @@ import java.util.EnumSet;
 import java.util.LinkedHashMap;
 import java.util.Optional;
 
-import org.apache.flink.table.annotation.ArgumentHint;
-import org.apache.flink.table.annotation.ArgumentTrait;
 import org.apache.flink.table.annotation.StateHint;
 import org.apache.flink.table.api.DataTypes;
 import org.apache.flink.table.api.EnvironmentSettings;
@@ -115,7 +113,17 @@ public class SqlPtfJob {
 				);
 				""");
 
-		Table authors = tableEnv.sqlQuery("SELECT id, before, after, source, op, ts_ms FROM ToastBackfill(TABLE authors PARTITION BY id)");
+		Table authors = tableEnv.sqlQuery("""
+				SELECT
+				  id,
+				  before,
+				  after,
+				  source,
+				  op,
+				  ts_ms
+				FROM
+				  ToastBackfill(TABLE authors PARTITION BY id, 'biography')
+				""");
 		authors.insertInto("authors_backfilled").execute();
 		authors.execute().print();
 	}
@@ -128,21 +136,24 @@ public class SqlPtfJob {
 			public String value;
 		}
 
-		public void eval(@StateHint ToastState state, @ArgumentHint(ArgumentTrait.TABLE_AS_SET) Row input) {
+		public void eval(
+				@StateHint ToastState state,
+				//@ArgumentHint(ArgumentTrait.TABLE_AS_SET)
+				Row input,
+				//@ArgumentHint(value = ArgumentTrait.SCALAR, name = "column")
+				String column) {
 			Row newRowState = (Row)input.getField("after");
 
 			switch ((String)input.getField("op")) {
-				case "r", "c" -> state.value = (String) newRowState.getField("biography");
+				case "r", "c" -> state.value = (String) newRowState.getField(column);
 
 				case "u" -> {
-					if (UNCHANGED_TOAST_VALUE.equals(newRowState.getField("biography"))) {
-						newRowState.setField("biography", state.value);
+					if (UNCHANGED_TOAST_VALUE.equals(newRowState.getField(column))) {
+						newRowState.setField(column, state.value);
 					} else {
-						state.value = (String) newRowState.getField("biography");
+						state.value = (String) newRowState.getField(column);
 					}
 				}
-
-				case "d" -> {}
 			}
 
 			collect(input);
@@ -160,7 +171,8 @@ public class SqlPtfJob {
 									Row.class,
 									false,
 									EnumSet.of(StaticArgumentTrait.TABLE_AS_SET
-							))
+							)),
+							StaticArgument.scalar("column", DataTypes.STRING(), false)
 					)
 					.stateTypeStrategies(stateTypeStrategies)
 					.outputTypeStrategy(callContext -> Optional.of(callContext.getArgumentDataTypes().get(0)))
