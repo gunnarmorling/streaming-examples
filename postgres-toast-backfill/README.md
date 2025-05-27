@@ -52,7 +52,7 @@ Obtain a Postgres client session:
 
 ```bash
 docker run --tty --rm -i \
-  --network partial-events-network \
+  --network toast-backfill-network \
   quay.io/debezium/tooling:latest \
   bash -c 'pgcli postgresql://postgres:postgres@postgres:5432/postgres'
 ```
@@ -67,7 +67,9 @@ Observe the placeholder value for the unchanged TOAST column `biography` in the 
 
 ```bash
 kcat -b localhost:9092 -t dbserver2.inventory.authors -C -q -o beginning -K "\t" -u | jq .
+```
 
+```json5
 {
   "id": 1001
 }
@@ -77,6 +79,7 @@ kcat -b localhost:9092 -t dbserver2.inventory.authors -C -q -o beginning -K "\t"
     "id": 1001,
     "first_name": "Tom",
     "last_name": "Wolfe",
+    # sentinel value for an unchanged TOAST column
     "biography": "__debezium_unavailable_value",
     "dob": -1257206400000000
   },
