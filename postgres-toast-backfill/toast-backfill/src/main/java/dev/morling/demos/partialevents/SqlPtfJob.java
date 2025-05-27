@@ -154,6 +154,10 @@ public class SqlPtfJob {
 						state.value = (String) newRowState.getField(column);
 					}
 				}
+
+				case "d" -> {
+					state.value = null;
+				}
 			}
 
 			collect(input);

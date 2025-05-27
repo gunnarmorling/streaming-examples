@@ -121,7 +121,8 @@ public class SqlOverAggJob {
 				          PARTITION BY id
 				          --ORDER BY time_ltz
 				          ORDER BY proctime
-				          RANGE UNBOUNDED PRECEDING
+				          --RANGE UNBOUNDED PRECEDING
+				          RANGE BETWEEN INTERVAL '30' DAY PRECEDING AND CURRENT ROW
 				        )
 				    END,
 				    after.dob
