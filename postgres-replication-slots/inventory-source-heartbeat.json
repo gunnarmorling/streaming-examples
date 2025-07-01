@@ -1,0 +1,23 @@
+{
+    "name": "inventory-connector-heartbeat",
+    "config": {
+        "connector.class": "io.debezium.connector.postgresql.PostgresConnector",
+        "tasks.max": "1",
+        "database.hostname": "postgres",
+        "database.port": "5432",
+        "database.user": "dbz_user",
+        "database.password": "kusnyf-maczuz-7qabnA",
+        "database.dbname" : "inventorydb",
+        "topic.prefix": "inventory_2",
+        "schema.include.list": "inventory",
+        "heartbeat.action.query" : "SELECT pg_logical_emit_message(false, 'heartbeat', now()::varchar)",
+        "heartbeat.interval.ms" : "30000",
+        "plugin.name" : "pgoutput",
+        "slot.name" : "logical_slot_5",
+
+        "key.converter" : "org.apache.kafka.connect.json.JsonConverter",
+        "key.converter.schemas.enable" : "false",
+        "value.converter" : "org.apache.kafka.connect.json.JsonConverter",
+        "value.converter.schemas.enable" : "false"
+    }
+}

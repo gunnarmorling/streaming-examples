@@ -1,0 +1,21 @@
+{
+    "name": "public-connector-2",
+    "config": {
+        "connector.class": "io.debezium.connector.postgresql.PostgresConnector",
+        "tasks.max": "1",
+        "database.hostname": "postgres",
+        "database.port": "5432",
+        "database.user": "dbz_user",
+        "database.password": "kusnyf-maczuz-7qabnA",
+        "database.dbname" : "inventorydb",
+        "topic.prefix": "public_2",
+        "schema.include.list": "public",
+        "plugin.name" : "pgoutput",
+        "slot.name" : "logical_slot_2",
+
+        "key.converter" : "org.apache.kafka.connect.json.JsonConverter",
+        "key.converter.schemas.enable" : "false",
+        "value.converter" : "org.apache.kafka.connect.json.JsonConverter",
+        "value.converter.schemas.enable" : "false"
+    }
+}

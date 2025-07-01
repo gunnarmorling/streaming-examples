@@ -1,0 +1,212 @@
+{
+  "id": null,
+  "title": "PostgreSQL WAL and Replication Slots",
+  "tags": ["postgres", "wal", "replication"],
+  "timezone": "browser",
+  "schemaVersion": 37,
+  "version": 1,
+  "refresh": "10s",
+  "panels": [
+    {
+      "type": "timeseries",
+      "title": "Total WAL Size",
+      "id": 1,
+      "gridPos": { "x": 0, "y": 0, "w": 8, "h": 10 },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "Prometheus"
+      },
+      "targets": [
+        {
+          "expr": "pg_wal_size_bytes",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "color": { "mode": "palette-classic" },
+          "lineWidth": 2
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom"
+        }
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Debezium Lag (Milliseconds Behind Source)",
+      "id": 5,
+      "gridPos": { "x": 8, "y": 0, "w": 8, "h": 10 },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "Prometheus"
+      },
+      "targets": [
+        {
+          "expr": "debezium_metrics_MilliSecondsBehindSource",
+          "refId": "A",
+          "legendFormat": "{{name}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "color": {
+            "mode": "palette-classic"
+          },
+          "lineWidth": 2
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom"
+        }
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Debezium Total Events",
+      "id": 5,
+      "gridPos": { "x": 16, "y": 0, "w": 8, "h": 10 },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "Prometheus"
+      },
+      "targets": [
+        {
+          "expr": "debezium_metrics_TotalNumberOfEventsSeen{context=~'streaming'}",
+          "refId": "A",
+          "legendFormat": "{{name}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+
+          "color": {
+            "mode": "palette-classic"
+          },
+          "lineWidth": 2
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom"
+        }
+      }
+    },
+
+
+    {
+      "type": "status-history",
+      "title": "Replication Slot Activity Status",
+      "id": 4,
+      "gridPos": { "x": 0, "y": 10, "w": 8, "h": 10 },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "Prometheus"
+      },
+      "targets": [
+        {
+          "expr": "min_over_time(pg_replication_slot_slot_is_active[1m])",
+          "legendFormat": "{{slot_name}}",
+          "refId": "B",
+          "interval": "1m",
+          "intervalFactor": 1
+        }
+      ],
+      "options": {
+        "displayMode": "gradient",
+        "colorMode": "value",
+        "rowHeight": 0.8,
+        "valueMappings": [
+          { "value": "0", "text": "Inactive", "color": "red" },
+          { "value": "1", "text": "Active", "color": "green" }
+        ]
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": 0 },
+              { "color": "green", "value": 1 }
+            ]
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "WAL Retained per Replication Slot",
+      "id": 2,
+      "gridPos": { "x": 8, "y": 10, "w": 8, "h": 10 },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "Prometheus"
+      },
+      "targets": [
+        {
+          "expr": "pg_replication_slots_pg_wal_lsn_diff",
+          "legendFormat": "{{slot_name}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "color": { "mode": "palette-classic" },
+          "lineWidth": 2
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom"
+        }
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Safe WAL Size Per Replication Slot",
+      "id": 3,
+      "gridPos": { "x": 16, "y": 10, "w": 8, "h": 10 },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "Prometheus"
+      },
+      "targets": [
+        {
+          "expr": "pg_replication_slot_safe_wal_size_bytes",
+          "legendFormat": "{{slot_name}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "color": { "mode": "palette-classic" },
+          "lineWidth": 2
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom"
+        }
+      }
+    }
+  ]
+}
