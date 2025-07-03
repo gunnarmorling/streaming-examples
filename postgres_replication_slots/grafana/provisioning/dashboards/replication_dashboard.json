@@ -9,7 +9,7 @@
   "panels": [
     {
       "type": "timeseries",
-      "title": "WAL Size",
+      "title": "Total WAL Size",
       "id": 1,
       "gridPos": { "x": 0, "y": 0, "w": 12, "h": 10 },
       "datasource": {
@@ -39,8 +39,8 @@
     },
     {
       "type": "timeseries",
-      "title": "WAL Retained per Replication Slot",
-      "id": 2,
+      "title": "Debezium Lag (Milliseconds Behind Source)",
+      "id": 5,
       "gridPos": { "x": 12, "y": 0, "w": 12, "h": 10 },
       "datasource": {
         "type": "prometheus",
@@ -48,46 +48,17 @@
       },
       "targets": [
         {
-          "expr": "pg_replication_slots_pg_wal_lsn_diff",
-          "legendFormat": "{{slot_name}}",
-          "refId": "A"
+          "expr": "debezium_metrics_MilliSecondsBehindSource",
+          "refId": "A",
+          "legendFormat": "{{name}}"
         }
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "bytes",
-          "color": { "mode": "palette-classic" },
-          "lineWidth": 2
-        },
-        "overrides": []
-      },
-      "options": {
-        "legend": {
-          "displayMode": "table",
-          "placement": "bottom"
-        }
-      }
-    },
-    {
-      "type": "timeseries",
-      "title": "Safe WAL Size Per Replication Slot",
-      "id": 3,
-      "gridPos": { "x": 0, "y": 10, "w": 12, "h": 10 },
-      "datasource": {
-        "type": "prometheus",
-        "uid": "Prometheus"
-      },
-      "targets": [
-        {
-          "expr": "pg_replication_slot_safe_wal_size_bytes",
-          "legendFormat": "{{slot_name}}",
-          "refId": "A"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "bytes",
-          "color": { "mode": "palette-classic" },
+          "unit": "ms",
+          "color": {
+            "mode": "palette-classic"
+          },
           "lineWidth": 2
         },
         "overrides": []
@@ -103,7 +74,7 @@
       "type": "status-history",
       "title": "Replication Slot Activity Status",
       "id": 4,
-      "gridPos": { "x": 12, "y": 10, "w": 12, "h": 10 },
+      "gridPos": { "x": 0, "y": 10, "w": 8, "h": 10 },
       "datasource": {
         "type": "prometheus",
         "uid": "Prometheus"
@@ -138,6 +109,68 @@
           }
         },
         "overrides": []
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "WAL Retained per Replication Slot",
+      "id": 2,
+      "gridPos": { "x": 8, "y": 10, "w": 8, "h": 10 },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "Prometheus"
+      },
+      "targets": [
+        {
+          "expr": "pg_replication_slots_pg_wal_lsn_diff",
+          "legendFormat": "{{slot_name}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "color": { "mode": "palette-classic" },
+          "lineWidth": 2
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom"
+        }
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Safe WAL Size Per Replication Slot",
+      "id": 3,
+      "gridPos": { "x": 16, "y": 10, "w": 8, "h": 10 },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "Prometheus"
+      },
+      "targets": [
+        {
+          "expr": "pg_replication_slot_safe_wal_size_bytes",
+          "legendFormat": "{{slot_name}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "color": { "mode": "palette-classic" },
+          "lineWidth": 2
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom"
+        }
       }
     }
   ]
