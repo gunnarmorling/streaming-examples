@@ -69,7 +69,7 @@ Get a Postgres session:
 
 ```bash
 docker run --tty --rm -i \
-  --network postgres_replication_slots_default \
+  --network postgres-replication-slots_default \
   quay.io/debezium/tooling:latest \
   bash -c 'pgcli postgresql://user:top-secret@postgres:5432/inventorydb'
 ```
