@@ -1,0 +1,12 @@
+{
+  "fields": [
+    {
+      "name": "sensor_id",
+      "type": "long"
+    }
+  ],
+  "name": "MeasurementKey",
+  "namespace": "dev.morling.demos.kroxy.validation.example.measurements",
+  "type": "record"
+}
+

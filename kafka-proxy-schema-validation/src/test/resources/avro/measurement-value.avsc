@@ -1,0 +1,19 @@
+{
+  "fields": [
+    {
+      "name": "name",
+      "type": "string"
+    },
+    {
+      "name": "timestamp",
+      "type": "long"
+    },
+    {
+      "name": "value",
+      "type": "int"
+    }
+  ],
+  "name": "Measurement",
+  "namespace": "dev.morling.demos.kroxy.validation.example.measurements",
+  "type": "record"
+}

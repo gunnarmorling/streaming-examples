@@ -1,0 +1,33 @@
+#
+# Copyright Kroxylicious Authors.
+#
+# Licensed under the Apache Software License version 2.0, available at http://www.apache.org/licenses/LICENSE-2.0
+#
+
+---
+management:
+  endpoints:
+    prometheus: {}
+virtualClusters:
+  - name: demo
+    targetCluster:
+      bootstrapServers: kafka:19092
+    gateways:
+    - name: mygateway
+      portIdentifiesNode:
+        bootstrapAddress: localhost:9192
+        nodeIdRanges: 
+        - name: mixed
+          start: 1
+          end: 1
+    logNetwork: true
+    logFrames: true
+filterDefinitions:
+- name: toUpper
+  type: ProduceRequestTransformation
+  config:
+    transformation: UpperCasing
+    transformationConfig:
+      charset: UTF-8
+defaultFilters:
+  - toUpper

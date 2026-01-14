@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.com/movie.schema.json",
+  "title": "Movie",
+  "description": "A movie",
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "number"
+    },
+    "title": {
+      "type": "string"
+    },
+    "year": {
+      "type": "string",
+	  "format" : "date"
+    }
+  },
+  "required": ["id", "title", "year"]
+}
+

@@ -1,0 +1,23 @@
+{
+  "fields": [
+    {
+      "name": "id",
+      "type": "long"
+    },
+    {
+      "name": "name",
+      "type": "string"
+    },
+    {
+      "name": "longitude",
+      "type": "double"
+    },
+    {
+      "name": "latitude",
+      "type": "double"
+    }
+  ],
+  "name": "Sensor",
+  "namespace": "dev.morling.demos.kroxy.validation.example.measurements",
+  "type": "record"
+}
