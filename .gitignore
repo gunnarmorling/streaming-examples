@@ -40,3 +40,6 @@ nb-configuration.xml
 
 #JReleaser
 out/
+
+# Embedded engine offsets
+offsets.dat
