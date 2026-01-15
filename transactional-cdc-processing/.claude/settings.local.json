@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(mvn compile:*)",
+      "WebFetch(domain:github.com)",
+      "Bash(./mvnw clean:*)",
+      "Bash(./mvnw compile:*)"
+    ]
+  }
+}
