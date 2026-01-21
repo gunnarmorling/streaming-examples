@@ -5,7 +5,9 @@
       "WebFetch(domain:github.com)",
       "Bash(./mvnw clean:*)",
       "Bash(./mvnw compile:*)",
-      "Bash(./mvnw test-compile:*)"
+      "Bash(./mvnw test-compile:*)",
+      "Bash(xargs:*)",
+      "Bash(./mvnw verify:*)"
     ]
   }
 }

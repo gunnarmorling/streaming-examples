@@ -195,6 +195,10 @@ public class TxAwareTwoInputNonBroadcastJoinProcessOperator<K, V, T_OTHER, OUT> 
 		Iterable<V> left = leftState1.get();
 		DataChangeEvent latestSoFar = null;
 
+		if (left == null) {
+			return null;
+		}
+
 		for (V record : left) {
 			DataChangeEvent dce = (DataChangeEvent) record;
 
@@ -209,6 +213,10 @@ public class TxAwareTwoInputNonBroadcastJoinProcessOperator<K, V, T_OTHER, OUT> 
 	private V getLatestLeftByCommitLsn(long commitLsn) {
 		Iterable<V> left = leftState1.get();
 		DataChangeEvent latestSoFar = null;
+
+		if (left == null) {
+			return null;
+		}
 
 		for (V record : left) {
 			DataChangeEvent dce = (DataChangeEvent) record;

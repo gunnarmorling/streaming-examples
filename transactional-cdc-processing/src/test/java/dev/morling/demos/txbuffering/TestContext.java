@@ -10,8 +10,10 @@ package dev.morling.demos.txbuffering;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -30,6 +32,7 @@ public class TestContext implements AutoCloseable {
     private final ExecutorService executor;
     private final KafkaConsumer<String, String> consumer;
     private final Map<String, List<ConsumerRecord<String, String>>> buffers;
+    private final Set<String> subscribedTopics;
     private final AtomicReference<Throwable> flinkError;
     private final AtomicBoolean closed;
 
@@ -40,13 +43,14 @@ public class TestContext implements AutoCloseable {
             return t;
         });
         this.buffers = new HashMap<>();
+        this.subscribedTopics = new HashSet<>();
         this.flinkError = new AtomicReference<>();
         this.closed = new AtomicBoolean(false);
 
         this.consumer = new KafkaConsumer<>(Map.of(
                 ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, bootstrapServers,
                 ConsumerConfig.GROUP_ID_CONFIG, "test-consumer-" + System.currentTimeMillis(),
-                ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest",
+                ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "latest",
                 ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class.getName(),
                 ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class.getName()
         ));
@@ -75,7 +79,9 @@ public class TestContext implements AutoCloseable {
     }
 
     public CompletableFuture<List<ConsumerRecord<String, String>>> take(String topic, int n) {
-        consumer.subscribe(List.of(topic));
+        if (subscribedTopics.add(topic)) {
+            consumer.subscribe(List.of(topic));
+        }
 
         return CompletableFuture.supplyAsync(() -> {
             List<ConsumerRecord<String, String>> result = new ArrayList<>(n);
