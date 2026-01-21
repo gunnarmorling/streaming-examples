@@ -6,11 +6,16 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import io.debezium.engine.ChangeEvent;
 import io.debezium.engine.DebeziumEngine;
 import io.debezium.engine.format.Json;
 
 public class ChangeEventConsumer {
+
+    private static final Logger LOG = LoggerFactory.getLogger(ChangeEventConsumer.class);
 
     public static void main(String[] args) throws IOException, InterruptedException {
         final Properties props = new Properties();
@@ -41,7 +46,7 @@ public class ChangeEventConsumer {
         DebeziumEngine<ChangeEvent<String, String>> engine = DebeziumEngine.create(Json.class)
                 .using(props)
                 .notifying(record -> {
-                    System.out.println(record);
+                    LOG.info("{}", record);
                 }).build();
 
         // Run the engine asynchronously ...
@@ -49,10 +54,10 @@ public class ChangeEventConsumer {
         executor.execute(engine);
 
         // Await Ctrl+C
-        System.out.println("Press Ctrl+C to stop...");
+        LOG.info("Press Ctrl+C to stop...");
         CountDownLatch shutdownLatch = new CountDownLatch(1);
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
-            System.out.println("Stopping...");
+            LOG.info("Stopping...");
             shutdownLatch.countDown();
         }));
         shutdownLatch.await();
