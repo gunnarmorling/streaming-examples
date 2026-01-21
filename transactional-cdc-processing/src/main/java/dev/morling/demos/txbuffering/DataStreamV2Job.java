@@ -56,13 +56,14 @@ import static org.apache.flink.datastream.impl.utils.StreamUtils.validateStates;
 public class DataStreamV2Job {
 
 	public static void main(String[] args) throws Exception {
+		run("localhost:9092");
+	}
 
+	public static void run(String bootstrapServers) throws Exception {
 		ExecutionEnvironment env = ExecutionEnvironment.getInstance();
 		((ExecutionEnvironmentImpl)env).getConfiguration().set(RestOptions.PORT, 8081);
 		((ExecutionEnvironmentImpl)env).getConfiguration().setString("state.backend.async", "false");
 		((ExecutionEnvironmentImpl)env).getConfiguration().setString("state.backend", "hashmap");
-
-		String bootstrapServers = "localhost:9092";
 
 		JsonDeserializationSchema<DataChangeEvent> jsonFormat=new JsonDeserializationSchema<>(DataChangeEvent.class);
 		JsonDeserializationSchema<TransactionEvent> txFormat=new JsonDeserializationSchema<>(TransactionEvent.class);
