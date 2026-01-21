@@ -7,21 +7,24 @@
  */
 package dev.morling.demos.txbuffering.join;
 
-import java.util.Iterator;
+import java.lang.System.Logger.Level;
+import java.util.List;
 import java.util.Set;
 import java.util.SortedSet;
 import java.util.TreeSet;
 
+import org.apache.flink.api.common.state.ListStateDeclaration;
 import org.apache.flink.api.common.state.StateDeclaration;
 import org.apache.flink.api.common.state.StateDeclarations;
 import org.apache.flink.api.common.state.ValueStateDeclaration;
+import org.apache.flink.api.common.state.v2.ListState;
+import org.apache.flink.api.common.state.v2.ValueState;
 import org.apache.flink.api.common.typeinfo.TypeDescriptors;
 import org.apache.flink.api.common.watermark.LongWatermark;
 import org.apache.flink.api.common.watermark.Watermark;
 import org.apache.flink.api.common.watermark.WatermarkHandlingResult;
 import org.apache.flink.datastream.api.common.Collector;
 import org.apache.flink.datastream.api.context.NonPartitionedContext;
-import org.apache.flink.datastream.api.context.PartitionedContext;
 import org.apache.flink.datastream.api.extension.join.JoinFunction;
 import org.apache.flink.datastream.api.extension.join.JoinType;
 import org.apache.flink.datastream.impl.extension.join.operators.TwoInputNonBroadcastJoinProcessFunction;
@@ -29,24 +32,28 @@ import org.apache.flink.datastream.impl.extension.join.operators.TwoInputNonBroa
 import dev.morling.demos.txbuffering.model.generic.DataChangeEvent;
 import dev.morling.demos.txbuffering.model.generic.DataChangeEventPair;
 
-import static java.lang.System.Logger.Level;
-
 public class TxAwareJoinProcessFunction extends TwoInputNonBroadcastJoinProcessFunction<DataChangeEvent, DataChangeEvent, DataChangeEventPair> {
 
 	private static final System.Logger LOG = System.getLogger(TxAwareJoinProcessFunction.class.getName());
 
-	ValueStateDeclaration<Long> valueStateDeclaration = StateDeclarations.valueState("min-watermark-state", TypeDescriptors.LONG);
-
-	private long minWatermarkFromFirstInput = -1;
-	private long minWatermarkFromSecondInput = -1;
-	private long minWatermark = -1;
-	private SortedSet<Long> waterMarksToFlush = new TreeSet<Long>();
+	private static final ValueStateDeclaration<Long> MIN_WATERMARK_FIRST_INPUT_STATE =
+			StateDeclarations.valueState("min-watermark-first-input", TypeDescriptors.LONG);
+	private static final ValueStateDeclaration<Long> MIN_WATERMARK_SECOND_INPUT_STATE =
+			StateDeclarations.valueState("min-watermark-second-input", TypeDescriptors.LONG);
+	private static final ValueStateDeclaration<Long> MIN_WATERMARK_STATE =
+			StateDeclarations.valueState("min-watermark", TypeDescriptors.LONG);
+	private static final ListStateDeclaration<Long> WATERMARKS_TO_FLUSH_STATE =
+			StateDeclarations.listState("watermarks-to-flush", TypeDescriptors.LONG);
 
 	@Override
 	public Set<StateDeclaration> usesStates() {
-		return Set.of(valueStateDeclaration);
+		return Set.of(
+				MIN_WATERMARK_FIRST_INPUT_STATE,
+				MIN_WATERMARK_SECOND_INPUT_STATE,
+				MIN_WATERMARK_STATE,
+				WATERMARKS_TO_FLUSH_STATE
+		);
 	}
-
 
 	public TxAwareJoinProcessFunction(JoinFunction<DataChangeEvent, DataChangeEvent, DataChangeEventPair> joinFunction,
 			JoinType joinType) {
@@ -54,50 +61,39 @@ public class TxAwareJoinProcessFunction extends TwoInputNonBroadcastJoinProcessF
 	}
 
 	@Override
-	public void processRecordFromFirstInput(DataChangeEvent record, Collector<DataChangeEventPair> output,
-			PartitionedContext<DataChangeEventPair> ctx) throws Exception {
-
-		LOG.log(Level.DEBUG, "Processing record {0}", record);
-
-		super.processRecordFromFirstInput(record, output, ctx);
-	}
-
-
-	@Override
 	public WatermarkHandlingResult onWatermarkFromFirstInput(Watermark watermark,
 			Collector<DataChangeEventPair> output, NonPartitionedContext<DataChangeEventPair> ctx)
 					throws Exception {
 
-		//            Long previousTxn = txnState.value();
+		long watermarkValue = ((LongWatermark) watermark).getValue();
+		LOG.log(Level.DEBUG, "Receiving WM {0} (first)", watermarkValue);
 
-		LOG.log(Level.DEBUG, "Receiving WM {0} (first)", ((LongWatermark)watermark).getValue());
-		waterMarksToFlush.add(((LongWatermark)watermark).getValue());
-		minWatermarkFromFirstInput = ((LongWatermark)watermark).getValue();
+		ctx.applyToAllPartitions((out, partitionCtx) -> {
+			ValueState<Long> minWatermarkFirstInputState = partitionCtx.getStateManager().getState(MIN_WATERMARK_FIRST_INPUT_STATE);
+			ValueState<Long> minWatermarkSecondInputState = partitionCtx.getStateManager().getState(MIN_WATERMARK_SECOND_INPUT_STATE);
+			ValueState<Long> minWatermarkState = partitionCtx.getStateManager().getState(MIN_WATERMARK_STATE);
+			ListState<Long> watermarksToFlushState = partitionCtx.getStateManager().getState(WATERMARKS_TO_FLUSH_STATE);
 
-		long minWatermark = Math.min(minWatermarkFromFirstInput, minWatermarkFromSecondInput);
+			minWatermarkFirstInputState.update(watermarkValue);
+			watermarksToFlushState.add(watermarkValue);
 
-		//			System.out.println(this.minWatermark + " " + minWatermarkFromFirstInput + " " + minWatermarkFromSecondInput);
-
-		if (minWatermark > this.minWatermark) {
-			this.minWatermark = minWatermark;
-
-			Iterator<Long> waterMarkstoFlush = waterMarksToFlush.iterator();
-
-			while(waterMarkstoFlush.hasNext()) {
-				Long toFlush = waterMarkstoFlush.next();
-
-				if (toFlush <= minWatermark) {
-					waterMarkstoFlush.remove();
-
-					LOG.log(Level.DEBUG, "Emitting WM {0} (first)", toFlush);
-					LongWatermark outgoingWatermark = WatermarkInjector.WATERMARK_DECLARATION.newWatermark(toFlush);
-					ctx.getWatermarkManager().emitWatermark(outgoingWatermark);
-				}
-				else {
-					break;
-				}
+			Long minWatermarkSecondInput = minWatermarkSecondInputState.value();
+			if (minWatermarkSecondInput == null) {
+				minWatermarkSecondInput = -1L;
 			}
-		}
+
+			long minWatermark = Math.min(watermarkValue, minWatermarkSecondInput);
+
+			Long currentMinWatermark = minWatermarkState.value();
+			if (currentMinWatermark == null) {
+				currentMinWatermark = -1L;
+			}
+
+			if (minWatermark > currentMinWatermark) {
+				minWatermarkState.update(minWatermark);
+				flushWatermarks(watermarksToFlushState, minWatermark, ctx);
+			}
+		});
 
 		return WatermarkHandlingResult.POLL;
 	}
@@ -107,35 +103,65 @@ public class TxAwareJoinProcessFunction extends TwoInputNonBroadcastJoinProcessF
 			Collector<DataChangeEventPair> output, NonPartitionedContext<DataChangeEventPair> ctx)
 					throws Exception {
 
-		LOG.log(Level.DEBUG, "Receiving WM {0} (second)", ((LongWatermark)watermark).getValue());
-		waterMarksToFlush.add(((LongWatermark)watermark).getValue());
-		minWatermarkFromSecondInput = ((LongWatermark)watermark).getValue();
+		long watermarkValue = ((LongWatermark) watermark).getValue();
+		LOG.log(Level.DEBUG, "Receiving WM {0} (second)", watermarkValue);
 
-		long minWatermark = Math.min(minWatermarkFromFirstInput, minWatermarkFromSecondInput);
+		ctx.applyToAllPartitions((out, partitionCtx) -> {
+			ValueState<Long> minWatermarkFirstInputState = partitionCtx.getStateManager().getState(MIN_WATERMARK_FIRST_INPUT_STATE);
+			ValueState<Long> minWatermarkSecondInputState = partitionCtx.getStateManager().getState(MIN_WATERMARK_SECOND_INPUT_STATE);
+			ValueState<Long> minWatermarkState = partitionCtx.getStateManager().getState(MIN_WATERMARK_STATE);
+			ListState<Long> watermarksToFlushState = partitionCtx.getStateManager().getState(WATERMARKS_TO_FLUSH_STATE);
 
-		if (minWatermark > this.minWatermark) {
-			this.minWatermark = minWatermark;
+			minWatermarkSecondInputState.update(watermarkValue);
+			watermarksToFlushState.add(watermarkValue);
 
-			Iterator<Long> waterMarkstoFlush = waterMarksToFlush.iterator();
-
-			while(waterMarkstoFlush.hasNext()) {
-				Long toFlush = waterMarkstoFlush.next();
-
-				if (toFlush <= minWatermark) {
-					waterMarkstoFlush.remove();
-
-					LOG.log(Level.DEBUG, "Emitting WM {0} (second)", toFlush);
-					LongWatermark outgoingWatermark = WatermarkInjector.WATERMARK_DECLARATION.newWatermark(toFlush);
-					ctx.getWatermarkManager().emitWatermark(outgoingWatermark);
-				}
-				else {
-					break;
-				}
+			Long minWatermarkFirstInput = minWatermarkFirstInputState.value();
+			if (minWatermarkFirstInput == null) {
+				minWatermarkFirstInput = -1L;
 			}
-		}
 
+			long minWatermark = Math.min(minWatermarkFirstInput, watermarkValue);
+
+			Long currentMinWatermark = minWatermarkState.value();
+			if (currentMinWatermark == null) {
+				currentMinWatermark = -1L;
+			}
+
+			if (minWatermark > currentMinWatermark) {
+				minWatermarkState.update(minWatermark);
+				flushWatermarks(watermarksToFlushState, minWatermark, ctx);
+			}
+		});
 
 		return WatermarkHandlingResult.POLL;
 	}
 
+	private void flushWatermarks(ListState<Long> watermarksToFlushState, long minWatermark,
+			NonPartitionedContext<DataChangeEventPair> ctx) throws Exception {
+		Iterable<Long> watermarks = watermarksToFlushState.get();
+		if (watermarks == null) {
+			return;
+		}
+
+		SortedSet<Long> sortedWatermarks = new TreeSet<>();
+		for (Long wm : watermarks) {
+			sortedWatermarks.add(wm);
+		}
+
+		List<Long> toKeep = new java.util.ArrayList<>();
+		for (Long toFlush : sortedWatermarks) {
+			if (toFlush <= minWatermark) {
+				LOG.log(Level.DEBUG, "Emitting WM {0}", toFlush);
+				LongWatermark outgoingWatermark = WatermarkInjector.WATERMARK_DECLARATION.newWatermark(toFlush);
+				ctx.getWatermarkManager().emitWatermark(outgoingWatermark);
+			} else {
+				toKeep.add(toFlush);
+			}
+		}
+
+		watermarksToFlushState.clear();
+		for (Long wm : toKeep) {
+			watermarksToFlushState.add(wm);
+		}
+	}
 }
