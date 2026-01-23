@@ -7,8 +7,10 @@
  */
 package dev.morling.demos.txbuffering.join;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Iterator;
+import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Set;
@@ -91,14 +93,17 @@ public class TxAwareTwoInputNonBroadcastJoinProcessOperator<K, V, T_OTHER, OUT> 
 		minWatermarkFromFirstInput = ((LongWatermark)watermark.getWatermark()).getValue();
 		watermarksToFlush.add(minWatermarkFromFirstInput);
 
+		long newMinWatermark = Math.min(minWatermarkFromFirstInput, minWatermarkFromSecondInput);
 
-		long minWatermark = Math.min(minWatermarkFromFirstInput, minWatermarkFromSecondInput);
-
-		if (minWatermark > this.minWatermark) {
-			this.minWatermark = minWatermark;
-			flushBuffers(minWatermark);
+		List<Long> toEmit = new ArrayList<>();
+		if (newMinWatermark > this.minWatermark) {
+			this.minWatermark = newMinWatermark;
+			flushBuffers(newMinWatermark);
+			toEmit = extractWatermarksToEmit(newMinWatermark);
 		}
 
+		// Pass watermarks to emit to the function before calling super
+		((TxAwareJoinProcessFunction) joinProcessFunction).setWatermarksToEmit(toEmit);
 		super.processWatermark1Internal(watermark);
 	}
 
@@ -109,84 +114,90 @@ public class TxAwareTwoInputNonBroadcastJoinProcessOperator<K, V, T_OTHER, OUT> 
 		minWatermarkFromSecondInput = ((LongWatermark)watermark.getWatermark()).getValue();
 		watermarksToFlush.add(minWatermarkFromSecondInput);
 
-		long minWatermark = Math.min(minWatermarkFromFirstInput, minWatermarkFromSecondInput);
+		long newMinWatermark = Math.min(minWatermarkFromFirstInput, minWatermarkFromSecondInput);
 
-		if (minWatermark > this.minWatermark) {
-			this.minWatermark = minWatermark;
-			flushBuffers(minWatermark);
+		List<Long> toEmit = new ArrayList<>();
+		if (newMinWatermark > this.minWatermark) {
+			this.minWatermark = newMinWatermark;
+			flushBuffers(newMinWatermark);
+			toEmit = extractWatermarksToEmit(newMinWatermark);
 		}
 
+		// Pass watermarks to emit to the function before calling super
+		((TxAwareJoinProcessFunction) joinProcessFunction).setWatermarksToEmit(toEmit);
 		super.processWatermark2Internal(watermark);
 	}
 
-	private void flushBuffers(long watermark) throws Exception {
-		Iterator<Long> waterMarkstoFlush = watermarksToFlush.iterator();
-
-		while(waterMarkstoFlush.hasNext()) {
-			Long toFlush = waterMarkstoFlush.next();
-
-			if(toFlush <= watermark) {
-
-				LOG.log(Level.DEBUG, "Flushing buffers {0}", String.valueOf(toFlush));
-				waterMarkstoFlush.remove();
-
-				Set<Object> keys = keySet;
-
-				LOG.log(Level.DEBUG, "Keys: {0}", keys);
-
-	//
-				keys.forEach(key -> {
-					try {
-						setAsyncKeyedContextElement(new StreamRecord<Long>((Long) key), r -> r);
-					} catch (Exception e) {
-						// TODO Auto-generated catch block
-						e.printStackTrace();
-					}
-
-					V leftChanged = getLeftByCommitLsn(toFlush);
-					if (leftChanged != null) {
-						Map<Long, DataChangeEvent> latestRightPerIdByCommitLsn = getLatestRightPerIdByCommitLsn(toFlush);
-
-						StreamRecord<V> element = new StreamRecord<V>(leftChanged);
-						collector.setTimestampFromStreamRecord(element);
-				        V leftRecord = element.getValue();
-
-				        for (Entry<Long, DataChangeEvent> right : latestRightPerIdByCommitLsn.entrySet()) {
-			                try {
-								joinProcessFunction
-									.getJoinFunction()
-									.processRecord(leftRecord, (T_OTHER) right.getValue(), collector, partitionedContext);
-							} catch (Exception e) {
-								// TODO Auto-generated catch block
-								e.printStackTrace();
-							}
-						}
-					}
-					else {
-						V left = getLatestLeftByCommitLsn(toFlush);
-
-						Map<Long, DataChangeEvent> rightChanged = getRightPerIdByCommitLsn(toFlush);
-
-				        for (Entry<Long, DataChangeEvent> right : rightChanged.entrySet()) {
-				        	StreamRecord<T_OTHER> element = new StreamRecord<T_OTHER>((T_OTHER)right.getValue());
-							collector.setTimestampFromStreamRecord(element);
-
-			                try {
-								joinProcessFunction
-									.getJoinFunction()
-									.processRecord(left, element.getValue(), collector, partitionedContext);
-							} catch (Exception e) {
-								// TODO Auto-generated catch block
-								e.printStackTrace();
-							}
-						}
-
-					}
-
-				});
+	private List<Long> extractWatermarksToEmit(long upToWatermark) {
+		List<Long> toEmit = new ArrayList<>();
+		Iterator<Long> it = watermarksToFlush.iterator();
+		while (it.hasNext()) {
+			Long wm = it.next();
+			if (wm <= upToWatermark) {
+				toEmit.add(wm);
+				it.remove();
+			} else {
+				break; // SortedSet, so remaining are all > upToWatermark
 			}
-			else {
-				break;
+		}
+		return toEmit;
+	}
+
+	private void flushBuffers(long watermark) throws Exception {
+		// Process each watermark <= the current min watermark
+		// Note: watermark removal is handled separately by extractWatermarksToEmit
+		for (Long toFlush : watermarksToFlush) {
+			if (toFlush > watermark) {
+				break; // SortedSet, so remaining are all > watermark
+			}
+
+			LOG.log(Level.DEBUG, "Flushing buffers {0}", String.valueOf(toFlush));
+
+			Set<Object> keys = keySet;
+			LOG.log(Level.DEBUG, "Keys: {0}", keys);
+
+			for (Object key : keys) {
+				try {
+					setAsyncKeyedContextElement(new StreamRecord<Long>((Long) key), r -> r);
+				} catch (Exception e) {
+					e.printStackTrace();
+				}
+
+				V leftChanged = getLeftByCommitLsn(toFlush);
+				if (leftChanged != null) {
+					Map<Long, DataChangeEvent> latestRightPerIdByCommitLsn = getLatestRightPerIdByCommitLsn(toFlush);
+
+					StreamRecord<V> element = new StreamRecord<V>(leftChanged);
+					collector.setTimestampFromStreamRecord(element);
+					V leftRecord = element.getValue();
+
+					for (Entry<Long, DataChangeEvent> right : latestRightPerIdByCommitLsn.entrySet()) {
+						try {
+							joinProcessFunction
+								.getJoinFunction()
+								.processRecord(leftRecord, (T_OTHER) right.getValue(), collector, partitionedContext);
+						} catch (Exception e) {
+							e.printStackTrace();
+						}
+					}
+				}
+				else {
+					V left = getLatestLeftByCommitLsn(toFlush);
+					Map<Long, DataChangeEvent> rightChanged = getRightPerIdByCommitLsn(toFlush);
+
+					for (Entry<Long, DataChangeEvent> right : rightChanged.entrySet()) {
+						StreamRecord<T_OTHER> element = new StreamRecord<T_OTHER>((T_OTHER)right.getValue());
+						collector.setTimestampFromStreamRecord(element);
+
+						try {
+							joinProcessFunction
+								.getJoinFunction()
+								.processRecord(left, element.getValue(), collector, partitionedContext);
+						} catch (Exception e) {
+							e.printStackTrace();
+						}
+					}
+				}
 			}
 		}
 	}
