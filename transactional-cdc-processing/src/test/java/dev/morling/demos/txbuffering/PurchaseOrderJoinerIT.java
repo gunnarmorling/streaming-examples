@@ -207,28 +207,26 @@ class PurchaseOrderJoinerIT {
         connA.setAutoCommit(false);
         Statement stmtA = connA.createStatement();
         stmtA.execute("SET search_path TO inventory");
-        stmtA.execute("INSERT INTO orders (order_date, purchaser, shipping_address) " +
-                "VALUES (CURRENT_DATE, 1001, 'Address A')");
-        ResultSet rsA = stmtA.executeQuery("SELECT lastval()");
+        ResultSet rsA = stmtA.executeQuery("INSERT INTO orders (order_date, purchaser, shipping_address) " +
+                "VALUES (CURRENT_DATE, 1001, 'Address A') RETURNING id");
         rsA.next();
         int orderIdA = rsA.getInt(1);
-        stmtA.execute("INSERT INTO order_lines (order_id, product_id, quantity, price) VALUES (" + orderIdA + ", 101, 1, 10.00)");
-        stmtA.execute("INSERT INTO order_lines (order_id, product_id, quantity, price) VALUES (" + orderIdA + ", 102, 2, 20.00)");
-        stmtA.execute("INSERT INTO order_lines (order_id, product_id, quantity, price) VALUES (" + orderIdA + ", 103, 3, 30.00)");
+        stmtA.execute(String.format("INSERT INTO order_lines (order_id, product_id, quantity, price) VALUES (%d, 101, 1, 10.00)", orderIdA));
+        stmtA.execute(String.format("INSERT INTO order_lines (order_id, product_id, quantity, price) VALUES (%d, 102, 2, 20.00)", orderIdA));
+        stmtA.execute(String.format("INSERT INTO order_lines (order_id, product_id, quantity, price) VALUES (%d, 103, 3, 30.00)", orderIdA));
 
         // BEGIN B
         Connection connB = DriverManager.getConnection(jdbcUrl, "postgres", "postgres");
         connB.setAutoCommit(false);
         Statement stmtB = connB.createStatement();
         stmtB.execute("SET search_path TO inventory");
-        stmtB.execute("INSERT INTO orders (order_date, purchaser, shipping_address) " +
-                "VALUES (CURRENT_DATE, 1002, 'Address B')");
-        ResultSet rsB = stmtB.executeQuery("SELECT lastval()");
+        ResultSet rsB = stmtB.executeQuery("INSERT INTO orders (order_date, purchaser, shipping_address) " +
+                "VALUES (CURRENT_DATE, 1002, 'Address B') RETURNING id");
         rsB.next();
         int orderIdB = rsB.getInt(1);
-        stmtB.execute("INSERT INTO order_lines (order_id, product_id, quantity, price) VALUES (" + orderIdB + ", 104, 4, 40.00)");
-        stmtB.execute("INSERT INTO order_lines (order_id, product_id, quantity, price) VALUES (" + orderIdB + ", 105, 5, 50.00)");
-        stmtB.execute("INSERT INTO order_lines (order_id, product_id, quantity, price) VALUES (" + orderIdB + ", 106, 6, 60.00)");
+        stmtB.execute(String.format("INSERT INTO order_lines (order_id, product_id, quantity, price) VALUES (%d, 104, 4, 40.00)", orderIdB));
+        stmtB.execute(String.format("INSERT INTO order_lines (order_id, product_id, quantity, price) VALUES (%d, 105, 5, 50.00)", orderIdB));
+        stmtB.execute(String.format("INSERT INTO order_lines (order_id, product_id, quantity, price) VALUES (%d, 106, 6, 60.00)", orderIdB));
 
         // COMMIT B
         connB.commit();
@@ -289,14 +287,13 @@ class PurchaseOrderJoinerIT {
              Statement stmt = conn.createStatement()) {
             conn.setAutoCommit(false);
             stmt.execute("SET search_path TO inventory");
-            stmt.execute("INSERT INTO orders (order_date, purchaser, shipping_address) " +
-                    "VALUES (CURRENT_DATE, 1003, 'Multi-TX Address')");
-            ResultSet rs = stmt.executeQuery("SELECT lastval()");
+            ResultSet rs = stmt.executeQuery("INSERT INTO orders (order_date, purchaser, shipping_address) " +
+                    "VALUES (CURRENT_DATE, 1003, 'Multi-TX Address') RETURNING id");
             rs.next();
             orderId = rs.getInt(1);
-            stmt.execute("INSERT INTO order_lines (order_id, product_id, quantity, price) VALUES (" + orderId + ", 101, 1, 10.00)");
-            stmt.execute("INSERT INTO order_lines (order_id, product_id, quantity, price) VALUES (" + orderId + ", 102, 1, 20.00)");
-            stmt.execute("INSERT INTO order_lines (order_id, product_id, quantity, price) VALUES (" + orderId + ", 103, 1, 30.00)");
+            stmt.execute(String.format("INSERT INTO order_lines (order_id, product_id, quantity, price) VALUES (%d, 101, 1, 10.00)", orderId));
+            stmt.execute(String.format("INSERT INTO order_lines (order_id, product_id, quantity, price) VALUES (%d, 102, 1, 20.00)", orderId));
+            stmt.execute(String.format("INSERT INTO order_lines (order_id, product_id, quantity, price) VALUES (%d, 103, 1, 30.00)", orderId));
             conn.commit();
         }
 
@@ -305,7 +302,7 @@ class PurchaseOrderJoinerIT {
              Statement stmt = conn.createStatement()) {
             conn.setAutoCommit(false);
             stmt.execute("SET search_path TO inventory");
-            stmt.execute("UPDATE orders SET shipping_address = 'Updated Multi-TX Address' WHERE id = " + orderId);
+            stmt.execute(String.format("UPDATE orders SET shipping_address = 'Updated Multi-TX Address' WHERE id = %d", orderId));
             conn.commit();
         }
 
@@ -314,11 +311,11 @@ class PurchaseOrderJoinerIT {
              Statement stmt = conn.createStatement()) {
             conn.setAutoCommit(false);
             stmt.execute("SET search_path TO inventory");
-            stmt.execute("INSERT INTO order_lines (order_id, product_id, quantity, price) VALUES (" + orderId + ", 104, 1, 40.00)");
-            stmt.execute("INSERT INTO order_lines (order_id, product_id, quantity, price) VALUES (" + orderId + ", 105, 1, 50.00)");
-            stmt.execute("INSERT INTO order_lines (order_id, product_id, quantity, price) VALUES (" + orderId + ", 106, 1, 60.00)");
-            stmt.execute("INSERT INTO order_lines (order_id, product_id, quantity, price) VALUES (" + orderId + ", 107, 1, 70.00)");
-            stmt.execute("INSERT INTO order_lines (order_id, product_id, quantity, price) VALUES (" + orderId + ", 108, 1, 80.00)");
+            stmt.execute(String.format("INSERT INTO order_lines (order_id, product_id, quantity, price) VALUES (%d, 104, 1, 40.00)", orderId));
+            stmt.execute(String.format("INSERT INTO order_lines (order_id, product_id, quantity, price) VALUES (%d, 105, 1, 50.00)", orderId));
+            stmt.execute(String.format("INSERT INTO order_lines (order_id, product_id, quantity, price) VALUES (%d, 106, 1, 60.00)", orderId));
+            stmt.execute(String.format("INSERT INTO order_lines (order_id, product_id, quantity, price) VALUES (%d, 107, 1, 70.00)", orderId));
+            stmt.execute(String.format("INSERT INTO order_lines (order_id, product_id, quantity, price) VALUES (%d, 108, 1, 80.00)", orderId));
             conn.commit();
         }
 
@@ -327,11 +324,11 @@ class PurchaseOrderJoinerIT {
              Statement stmt = conn.createStatement()) {
             conn.setAutoCommit(false);
             stmt.execute("SET search_path TO inventory");
-            stmt.execute("INSERT INTO order_lines (order_id, product_id, quantity, price) VALUES (" + orderId + ", 109, 1, 90.00)");
-            stmt.execute("INSERT INTO order_lines (order_id, product_id, quantity, price) VALUES (" + orderId + ", 101, 2, 100.00)");
-            stmt.execute("INSERT INTO order_lines (order_id, product_id, quantity, price) VALUES (" + orderId + ", 102, 2, 110.00)");
-            stmt.execute("INSERT INTO order_lines (order_id, product_id, quantity, price) VALUES (" + orderId + ", 103, 2, 120.00)");
-            stmt.execute("INSERT INTO order_lines (order_id, product_id, quantity, price) VALUES (" + orderId + ", 104, 2, 130.00)");
+            stmt.execute(String.format("INSERT INTO order_lines (order_id, product_id, quantity, price) VALUES (%d, 109, 1, 90.00)", orderId));
+            stmt.execute(String.format("INSERT INTO order_lines (order_id, product_id, quantity, price) VALUES (%d, 101, 2, 100.00)", orderId));
+            stmt.execute(String.format("INSERT INTO order_lines (order_id, product_id, quantity, price) VALUES (%d, 102, 2, 110.00)", orderId));
+            stmt.execute(String.format("INSERT INTO order_lines (order_id, product_id, quantity, price) VALUES (%d, 103, 2, 120.00)", orderId));
+            stmt.execute(String.format("INSERT INTO order_lines (order_id, product_id, quantity, price) VALUES (%d, 104, 2, 130.00)", orderId));
             conn.commit();
         }
 
@@ -340,11 +337,11 @@ class PurchaseOrderJoinerIT {
              Statement stmt = conn.createStatement()) {
             conn.setAutoCommit(false);
             stmt.execute("SET search_path TO inventory");
-            stmt.execute("INSERT INTO order_lines (order_id, product_id, quantity, price) VALUES (" + orderId + ", 105, 2, 140.00)");
-            stmt.execute("INSERT INTO order_lines (order_id, product_id, quantity, price) VALUES (" + orderId + ", 106, 2, 150.00)");
-            stmt.execute("INSERT INTO order_lines (order_id, product_id, quantity, price) VALUES (" + orderId + ", 107, 2, 160.00)");
-            stmt.execute("INSERT INTO order_lines (order_id, product_id, quantity, price) VALUES (" + orderId + ", 108, 2, 170.00)");
-            stmt.execute("INSERT INTO order_lines (order_id, product_id, quantity, price) VALUES (" + orderId + ", 109, 2, 180.00)");
+            stmt.execute(String.format("INSERT INTO order_lines (order_id, product_id, quantity, price) VALUES (%d, 105, 2, 140.00)", orderId));
+            stmt.execute(String.format("INSERT INTO order_lines (order_id, product_id, quantity, price) VALUES (%d, 106, 2, 150.00)", orderId));
+            stmt.execute(String.format("INSERT INTO order_lines (order_id, product_id, quantity, price) VALUES (%d, 107, 2, 160.00)", orderId));
+            stmt.execute(String.format("INSERT INTO order_lines (order_id, product_id, quantity, price) VALUES (%d, 108, 2, 170.00)", orderId));
+            stmt.execute(String.format("INSERT INTO order_lines (order_id, product_id, quantity, price) VALUES (%d, 109, 2, 180.00)", orderId));
             conn.commit();
         }
 
@@ -474,19 +471,18 @@ class PurchaseOrderJoinerIT {
              Statement stmt = conn.createStatement()) {
             conn.setAutoCommit(false);
             stmt.execute("SET search_path TO inventory");
-            stmt.execute("INSERT INTO orders (order_date, purchaser, shipping_address) " +
-                    "VALUES (CURRENT_DATE, 1004, 'Delete Test Address')");
-            ResultSet rsOrder = stmt.executeQuery("SELECT lastval()");
+            ResultSet rsOrder = stmt.executeQuery("INSERT INTO orders (order_date, purchaser, shipping_address) " +
+                    "VALUES (CURRENT_DATE, 1004, 'Delete Test Address') RETURNING id");
             rsOrder.next();
             orderId = rsOrder.getInt(1);
 
-            stmt.execute("INSERT INTO order_lines (order_id, product_id, quantity, price) VALUES (" + orderId + ", 101, 1, 15.00)");
-            ResultSet rsLine1 = stmt.executeQuery("SELECT lastval()");
+            ResultSet rsLine1 = stmt.executeQuery(String.format(
+                    "INSERT INTO order_lines (order_id, product_id, quantity, price) VALUES (%d, 101, 1, 15.00) RETURNING id", orderId));
             rsLine1.next();
             lineId1 = rsLine1.getInt(1);
 
-            stmt.execute("INSERT INTO order_lines (order_id, product_id, quantity, price) VALUES (" + orderId + ", 102, 2, 25.00)");
-            ResultSet rsLine2 = stmt.executeQuery("SELECT lastval()");
+            ResultSet rsLine2 = stmt.executeQuery(String.format(
+                    "INSERT INTO order_lines (order_id, product_id, quantity, price) VALUES (%d, 102, 2, 25.00) RETURNING id", orderId));
             rsLine2.next();
             lineId2 = rsLine2.getInt(1);
 
@@ -514,8 +510,8 @@ class PurchaseOrderJoinerIT {
              Statement stmt = conn.createStatement()) {
             conn.setAutoCommit(false);
             stmt.execute("SET search_path TO inventory");
-            stmt.execute("DELETE FROM order_lines WHERE id IN (" + lineId1 + ", " + lineId2 + ")");
-            stmt.execute("DELETE FROM orders WHERE id = " + orderId);
+            stmt.execute(String.format("DELETE FROM order_lines WHERE id IN (%d, %d)", lineId1, lineId2));
+            stmt.execute(String.format("DELETE FROM orders WHERE id = %d", orderId));
             conn.commit();
         }
 
@@ -532,7 +528,6 @@ class PurchaseOrderJoinerIT {
 
         try (Connection conn = DriverManager.getConnection(jdbcUrl, "postgres", "postgres");
              Statement stmt = conn.createStatement()) {
-
             conn.setAutoCommit(false);
 
             stmt.execute("SET search_path TO inventory");
@@ -552,7 +547,6 @@ class PurchaseOrderJoinerIT {
 
         try (Connection conn = DriverManager.getConnection(jdbcUrl, "postgres", "postgres");
              Statement stmt = conn.createStatement()) {
-
             conn.setAutoCommit(false);
 
             stmt.execute("SET search_path TO inventory");
@@ -569,7 +563,6 @@ class PurchaseOrderJoinerIT {
 
         try (Connection conn = DriverManager.getConnection(jdbcUrl, "postgres", "postgres");
              Statement stmt = conn.createStatement()) {
-
             conn.setAutoCommit(false);
 
             stmt.execute("SET search_path TO inventory");
