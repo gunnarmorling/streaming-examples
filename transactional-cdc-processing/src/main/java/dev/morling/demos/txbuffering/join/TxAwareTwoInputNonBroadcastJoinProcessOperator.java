@@ -99,6 +99,7 @@ public class TxAwareTwoInputNonBroadcastJoinProcessOperator<K, V, T_OTHER, OUT> 
 		if (newMinWatermark > this.minWatermark) {
 			this.minWatermark = newMinWatermark;
 			flushBuffers(newMinWatermark);
+			cleanupState(newMinWatermark);
 			toEmit = extractWatermarksToEmit(newMinWatermark);
 		}
 
@@ -120,6 +121,7 @@ public class TxAwareTwoInputNonBroadcastJoinProcessOperator<K, V, T_OTHER, OUT> 
 		if (newMinWatermark > this.minWatermark) {
 			this.minWatermark = newMinWatermark;
 			flushBuffers(newMinWatermark);
+			cleanupState(newMinWatermark);
 			toEmit = extractWatermarksToEmit(newMinWatermark);
 		}
 
@@ -284,7 +286,86 @@ public class TxAwareTwoInputNonBroadcastJoinProcessOperator<K, V, T_OTHER, OUT> 
 		}
 
 		return right;
+	}
 
+	/**
+	 * Cleans up old state after a watermark has been processed.
+	 * Retains only the latest record per key for processed transactions,
+	 * plus all records from future (not yet processed) transactions.
+	 */
+	private void cleanupState(long watermark) throws Exception {
+		for (Object key : keySet) {
+			try {
+				setAsyncKeyedContextElement(new StreamRecord<Long>((Long) key), r -> r);
+				cleanupLeftState(watermark);
+				cleanupRightState(watermark);
+			} catch (Exception e) {
+				throw new RuntimeException("Failed to cleanup state for key: " + key, e);
+			}
+		}
+	}
+
+	private void cleanupLeftState(long watermark) {
+		Iterable<V> left = leftState1.get();
+		if (left == null) {
+			return;
+		}
+
+		DataChangeEvent latestProcessed = null;
+		List<V> futureRecords = new ArrayList<>();
+
+		for (V record : left) {
+			DataChangeEvent dce = (DataChangeEvent) record;
+			if (dce.commitLsn() <= watermark) {
+				// Keep only the latest among processed records
+				if (latestProcessed == null || dce.commitLsn() > latestProcessed.commitLsn()) {
+					latestProcessed = dce;
+				}
+			} else {
+				// Preserve future (unprocessed) records
+				futureRecords.add(record);
+			}
+		}
+
+		leftState1.clear();
+		if (latestProcessed != null) {
+			leftState1.add((V) latestProcessed);
+		}
+		for (V record : futureRecords) {
+			leftState1.add(record);
+		}
+	}
+
+	private void cleanupRightState(long watermark) {
+		Iterable<T_OTHER> right = rightState1.get();
+		if (right == null) {
+			return;
+		}
+
+		// Keep latest per order line ID (multiple lines per order)
+		Map<Long, DataChangeEvent> latestPerId = new HashMap<>();
+		List<T_OTHER> futureRecords = new ArrayList<>();
+
+		for (T_OTHER record : right) {
+			DataChangeEvent dce = (DataChangeEvent) record;
+			if (dce.commitLsn() <= watermark) {
+				Long lineId = dce.id();
+				DataChangeEvent existing = latestPerId.get(lineId);
+				if (existing == null || dce.commitLsn() > existing.commitLsn()) {
+					latestPerId.put(lineId, dce);
+				}
+			} else {
+				futureRecords.add(record);
+			}
+		}
+
+		rightState1.clear();
+		for (DataChangeEvent dce : latestPerId.values()) {
+			rightState1.add((T_OTHER) dce);
+		}
+		for (T_OTHER record : futureRecords) {
+			rightState1.add(record);
+		}
 	}
 
 	@Override

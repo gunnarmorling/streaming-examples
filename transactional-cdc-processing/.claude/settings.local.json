@@ -7,7 +7,12 @@
       "Bash(./mvnw compile:*)",
       "Bash(./mvnw test-compile:*)",
       "Bash(xargs:*)",
-      "Bash(./mvnw verify:*)"
+      "Bash(./mvnw verify:*)",
+      "Bash(git checkout:*)",
+      "Bash(git init:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(./mvnw test:*)"
     ]
   }
 }
