@@ -10,7 +10,6 @@ package dev.morling.demos.txbuffering;
 import java.util.Collections;
 import java.util.HashSet;
 
-import org.apache.flink.api.common.serialization.SimpleStringSchema;
 import org.apache.flink.api.common.state.StateDeclaration;
 import org.apache.flink.api.common.state.v2.ListStateDescriptor;
 import org.apache.flink.api.common.typeinfo.TypeInformation;
@@ -19,7 +18,6 @@ import org.apache.flink.api.connector.dsv2.DataStreamV2SourceUtils;
 import org.apache.flink.api.dag.Transformation;
 import org.apache.flink.configuration.RestOptions;
 import org.apache.flink.connector.base.DeliveryGuarantee;
-import org.apache.flink.connector.kafka.sink.KafkaRecordSerializationSchema;
 import org.apache.flink.connector.kafka.sink.KafkaSink;
 import org.apache.flink.connector.kafka.source.KafkaSource;
 import org.apache.flink.connector.kafka.source.enumerator.initializer.OffsetsInitializer;
@@ -43,6 +41,7 @@ import org.apache.kafka.common.Uuid;
 import dev.morling.demos.txbuffering.join.CommitLsnFixer;
 import dev.morling.demos.txbuffering.join.DataChangeEventJoinFunction;
 import dev.morling.demos.txbuffering.join.NonPostCommitTopologySupportingKafkaSink;
+import dev.morling.demos.txbuffering.join.OrderWithLinesSerializationSchema;
 import dev.morling.demos.txbuffering.join.TxAwareAggregationFunction;
 import dev.morling.demos.txbuffering.join.TxAwareJoinProcessFunction;
 import dev.morling.demos.txbuffering.join.TxAwareTwoInputNonBroadcastJoinProcessOperator;
@@ -99,11 +98,7 @@ public class DataStreamV2Job {
 
 		KafkaSink<String> kafkaSink = KafkaSink.<String>builder()
 		        .setBootstrapServers(bootstrapServers)
-		        .setRecordSerializer(KafkaRecordSerializationSchema.builder()
-		            .setTopic("orders_with_lines")
-		            .setValueSerializationSchema(new SimpleStringSchema())
-		            .build()
-		        )
+		        .setRecordSerializer(new OrderWithLinesSerializationSchema("orders_with_lines"))
 		        .setDeliveryGuarantee(DeliveryGuarantee.AT_LEAST_ONCE)
 		        .build();
 

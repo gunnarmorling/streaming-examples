@@ -330,7 +330,7 @@ public class TxAwareTwoInputNonBroadcastJoinProcessOperator<K, V, T_OTHER, OUT> 
 					continue;
 				}
 
-				Long key = Long.valueOf((Integer) dce.after().get("id"));
+				Long key = dce.id();
 				DataChangeEvent latestSoFar = latestPerId.get(key);
 
 				if (latestSoFar == null || dce.commitLsn() >= latestSoFar.commitLsn()) {

@@ -22,7 +22,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 
 import dev.morling.demos.txbuffering.model.generic.DataChangeEventPair;
 
-public record OrderWithLines(long id, LocalDate orderDate, int purchaser, String shippingAddress, @JsonIgnore Map<Integer, OrderLine> linesById, long commitLsn) {
+public record OrderWithLines(long id, LocalDate orderDate, int purchaser, String shippingAddress, @JsonIgnore Map<Integer, OrderLine> linesById, long commitLsn, boolean deleted) {
 
 	@JsonGetter("lines")
 	public Collection<OrderLine> lines() {
@@ -36,11 +36,12 @@ public record OrderWithLines(long id, LocalDate orderDate, int purchaser, String
 			@JsonProperty("purchaser") int purchaser,
 			@JsonProperty("shippingAddress") String shippingAddress,
 			@JsonProperty("lines") List<OrderLine> lines,
-			@JsonProperty("commitLsn") long commitLsn) {
+			@JsonProperty("commitLsn") long commitLsn,
+			@JsonProperty("deleted") boolean deleted) {
 		Map<Integer, OrderLine> linesById = lines != null
 				? lines.stream().collect(Collectors.toMap(OrderLine::id, Function.identity()))
 				: new HashMap<>();
-		return new OrderWithLines(id, orderDate, purchaser, shippingAddress, linesById, commitLsn);
+		return new OrderWithLines(id, orderDate, purchaser, shippingAddress, linesById, commitLsn, deleted);
 	}
 
 	public static OrderWithLines fromDataChangeEventPair(DataChangeEventPair changeEventPair) {
@@ -57,7 +58,8 @@ public record OrderWithLines(long id, LocalDate orderDate, int purchaser, String
 				(int)order.get("purchaser"),
 				(String)order.get("shipping_address"),
 				new HashMap<>(Map.of(line.id(), line)),
-				changeEventPair.commitLsn()
+				changeEventPair.commitLsn(),
+				false
 		);
 	}
 
@@ -80,17 +82,19 @@ public record OrderWithLines(long id, LocalDate orderDate, int purchaser, String
 					(int)order.get("purchaser"),
 					(String)order.get("shipping_address"),
 					linesById,
-					changeEventPair.commitLsn());
+					changeEventPair.commitLsn(),
+					false);
 		}
 		else {
-			Map<String, Object> order = changeEventPair.left().before();
+			// DELETE event - mark order as deleted
 			return new OrderWithLines(
-					(int)order.get("id"),
-					null,
-					0,
-					null,
-					null,
-					changeEventPair.commitLsn());
+					id,
+					orderDate,
+					purchaser,
+					shippingAddress,
+					linesById,
+					changeEventPair.commitLsn(),
+					true);
 		}
 	}
 }

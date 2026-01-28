@@ -25,13 +25,14 @@ import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
 import org.apache.kafka.clients.consumer.KafkaConsumer;
+import org.apache.kafka.common.serialization.LongDeserializer;
 import org.apache.kafka.common.serialization.StringDeserializer;
 
 public class TestContext implements AutoCloseable {
 
     private final ExecutorService executor;
-    private final KafkaConsumer<String, String> consumer;
-    private final Map<String, List<ConsumerRecord<String, String>>> buffers;
+    private final KafkaConsumer<Long, String> consumer;
+    private final Map<String, List<ConsumerRecord<Long, String>>> buffers;
     private final Set<String> subscribedTopics;
     private final AtomicReference<Throwable> flinkError;
     private final AtomicBoolean closed;
@@ -51,7 +52,7 @@ public class TestContext implements AutoCloseable {
                 ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, bootstrapServers,
                 ConsumerConfig.GROUP_ID_CONFIG, "test-consumer-" + System.currentTimeMillis(),
                 ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "latest",
-                ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class.getName(),
+                ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, LongDeserializer.class.getName(),
                 ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class.getName()
         ));
 
@@ -68,8 +69,8 @@ public class TestContext implements AutoCloseable {
         });
     }
 
-    public Future<ConsumerRecord<String, String>> takeOne(String topic) {
-        CompletableFuture<ConsumerRecord<String, String>> future = new CompletableFuture<>();
+    public Future<ConsumerRecord<Long, String>> takeOne(String topic) {
+        CompletableFuture<ConsumerRecord<Long, String>> future = new CompletableFuture<>();
         take(topic, 1).thenAccept(list -> future.complete(list.getFirst()))
                 .exceptionally(e -> {
                     future.completeExceptionally(e);
@@ -78,14 +79,14 @@ public class TestContext implements AutoCloseable {
         return future;
     }
 
-    public CompletableFuture<List<ConsumerRecord<String, String>>> take(String topic, int n) {
+    public CompletableFuture<List<ConsumerRecord<Long, String>>> take(String topic, int n) {
         if (subscribedTopics.add(topic)) {
             consumer.subscribe(List.of(topic));
         }
 
         return CompletableFuture.supplyAsync(() -> {
-            List<ConsumerRecord<String, String>> result = new ArrayList<>(n);
-            List<ConsumerRecord<String, String>> buffer = buffers.computeIfAbsent(topic, k -> new ArrayList<>());
+            List<ConsumerRecord<Long, String>> result = new ArrayList<>(n);
+            List<ConsumerRecord<Long, String>> buffer = buffers.computeIfAbsent(topic, k -> new ArrayList<>());
 
             // First, drain from buffer
             while (!buffer.isEmpty() && result.size() < n) {
@@ -99,8 +100,8 @@ public class TestContext implements AutoCloseable {
                     throw new RuntimeException("Flink job failed", error);
                 }
 
-                ConsumerRecords<String, String> records = consumer.poll(Duration.ofMillis(100));
-                for (ConsumerRecord<String, String> record : records) {
+                ConsumerRecords<Long, String> records = consumer.poll(Duration.ofMillis(100));
+                for (ConsumerRecord<Long, String> record : records) {
                     if (result.size() < n) {
                         result.add(record);
                     }
@@ -118,7 +119,7 @@ public class TestContext implements AutoCloseable {
     }
 
     public void assertDrained() {
-        for (Map.Entry<String, List<ConsumerRecord<String, String>>> entry : buffers.entrySet()) {
+        for (Map.Entry<String, List<ConsumerRecord<Long, String>>> entry : buffers.entrySet()) {
             if (!entry.getValue().isEmpty()) {
                 throw new AssertionError("Buffer for topic '" + entry.getKey() + "' is not empty, contains "
                         + entry.getValue().size() + " record(s)");

@@ -79,11 +79,19 @@ public class TxAwareAggregationFunction implements OneInputStreamProcessFunction
 
 		ctx.applyToAllPartitions((collector, context) -> {
 			String value = context.getStateManager().getState(ORDER_STATE).value();
+			if (value == null) {
+				return;
+			}
 
 			OrderWithLines order = objectMapper.readValue(value, OrderWithLines.class);
 			if (order.commitLsn() == ((LongWatermark)watermark).getValue()) {
-				LOG.log(Level.DEBUG, "Apply to all ({0}) {1} {2}", String.valueOf(context.getTaskInfo().getIndexOfThisSubtask()), String.valueOf(((LongWatermark)watermark).getValue()), value);
+				LOG.log(Level.DEBUG, "Apply to all ({0}) {1} {2} deleted={3}", String.valueOf(context.getTaskInfo().getIndexOfThisSubtask()), String.valueOf(((LongWatermark)watermark).getValue()), value, order.deleted());
+				// Emit the value (serialization schema will convert to tombstone if deleted)
 				collector.collect(value);
+				if (order.deleted()) {
+					// Clear state for deleted order
+					context.getStateManager().getState(ORDER_STATE).clear();
+				}
 			}
 		});
 

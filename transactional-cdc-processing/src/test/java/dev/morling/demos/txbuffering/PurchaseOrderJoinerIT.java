@@ -140,7 +140,7 @@ class PurchaseOrderJoinerIT {
     void shouldJoinOrderWithLines() throws Exception {
         insertPurchaseOrderWithTwoLines();
 
-        ConsumerRecord<String, String> record = ctx.takeOne("orders_with_lines").get(60, TimeUnit.SECONDS);
+        ConsumerRecord<Long, String> record = ctx.takeOne("orders_with_lines").get(60, TimeUnit.SECONDS);
 
         String expected = """
                 {
@@ -154,11 +154,12 @@ class PurchaseOrderJoinerIT {
                 }
                 """;
 
+        assertThat(record.key()).isEqualTo(10001L);
         assertJsonEquals(expected, record.value());
 
         addOrderLineAndUpdateShippingAddress();
 
-        ConsumerRecord<String, String> updatedRecord = ctx.takeOne("orders_with_lines").get(60, TimeUnit.SECONDS);
+        ConsumerRecord<Long, String> updatedRecord = ctx.takeOne("orders_with_lines").get(60, TimeUnit.SECONDS);
 
         String expectedAfterUpdate = """
                 {
@@ -173,11 +174,12 @@ class PurchaseOrderJoinerIT {
                 }
                 """;
 
+        assertThat(updatedRecord.key()).isEqualTo(10001L);
         assertJsonEquals(expectedAfterUpdate, updatedRecord.value());
 
         removeFirstTwoOrderLines();
 
-        ConsumerRecord<String, String> afterDeleteRecord = ctx.takeOne("orders_with_lines").get(60, TimeUnit.SECONDS);
+        ConsumerRecord<Long, String> afterDeleteRecord = ctx.takeOne("orders_with_lines").get(60, TimeUnit.SECONDS);
 
         String expectedAfterDelete = """
                 {
@@ -190,6 +192,7 @@ class PurchaseOrderJoinerIT {
                 }
                 """;
 
+        assertThat(afterDeleteRecord.key()).isEqualTo(10001L);
         assertJsonEquals(expectedAfterDelete, afterDeleteRecord.value());
 
         ctx.assertDrained();
@@ -236,7 +239,7 @@ class PurchaseOrderJoinerIT {
         connA.close();
 
         // B committed first, so it should be output first
-        ConsumerRecord<String, String> recordB = ctx.takeOne("orders_with_lines").get(60, TimeUnit.SECONDS);
+        ConsumerRecord<Long, String> recordB = ctx.takeOne("orders_with_lines").get(60, TimeUnit.SECONDS);
 
         String expectedB = """
                 {
@@ -251,10 +254,11 @@ class PurchaseOrderJoinerIT {
                 }
                 """.formatted(orderIdB);
 
+        assertThat(recordB.key()).isEqualTo((long) orderIdB);
         assertJsonEquals(expectedB, recordB.value());
 
         // A committed second, so it should be output second
-        ConsumerRecord<String, String> recordA = ctx.takeOne("orders_with_lines").get(60, TimeUnit.SECONDS);
+        ConsumerRecord<Long, String> recordA = ctx.takeOne("orders_with_lines").get(60, TimeUnit.SECONDS);
 
         String expectedA = """
                 {
@@ -269,6 +273,7 @@ class PurchaseOrderJoinerIT {
                 }
                 """.formatted(orderIdA);
 
+        assertThat(recordA.key()).isEqualTo((long) orderIdA);
         assertJsonEquals(expectedA, recordA.value());
 
         ctx.assertDrained();
@@ -344,7 +349,7 @@ class PurchaseOrderJoinerIT {
         }
 
         // Fetch and assert all 5 events
-        ConsumerRecord<String, String> record1 = ctx.takeOne("orders_with_lines").get(60, TimeUnit.SECONDS);
+        ConsumerRecord<Long, String> record1 = ctx.takeOne("orders_with_lines").get(60, TimeUnit.SECONDS);
         String expected1 = """
                 {
                     "id": %d,
@@ -357,9 +362,10 @@ class PurchaseOrderJoinerIT {
                     ]
                 }
                 """.formatted(orderId);
+        assertThat(record1.key()).isEqualTo((long) orderId);
         assertJsonEquals(expected1, record1.value());
 
-        ConsumerRecord<String, String> record2 = ctx.takeOne("orders_with_lines").get(60, TimeUnit.SECONDS);
+        ConsumerRecord<Long, String> record2 = ctx.takeOne("orders_with_lines").get(60, TimeUnit.SECONDS);
         String expected2 = """
                 {
                     "id": %d,
@@ -372,9 +378,10 @@ class PurchaseOrderJoinerIT {
                     ]
                 }
                 """.formatted(orderId);
+        assertThat(record2.key()).isEqualTo((long) orderId);
         assertJsonEquals(expected2, record2.value());
 
-        ConsumerRecord<String, String> record3 = ctx.takeOne("orders_with_lines").get(60, TimeUnit.SECONDS);
+        ConsumerRecord<Long, String> record3 = ctx.takeOne("orders_with_lines").get(60, TimeUnit.SECONDS);
         String expected3 = """
                 {
                     "id": %d,
@@ -392,9 +399,10 @@ class PurchaseOrderJoinerIT {
                     ]
                 }
                 """.formatted(orderId);
+        assertThat(record3.key()).isEqualTo((long) orderId);
         assertJsonEquals(expected3, record3.value());
 
-        ConsumerRecord<String, String> record4 = ctx.takeOne("orders_with_lines").get(60, TimeUnit.SECONDS);
+        ConsumerRecord<Long, String> record4 = ctx.takeOne("orders_with_lines").get(60, TimeUnit.SECONDS);
         String expected4 = """
                 {
                     "id": %d,
@@ -417,9 +425,10 @@ class PurchaseOrderJoinerIT {
                     ]
                 }
                 """.formatted(orderId);
+        assertThat(record4.key()).isEqualTo((long) orderId);
         assertJsonEquals(expected4, record4.value());
 
-        ConsumerRecord<String, String> record5 = ctx.takeOne("orders_with_lines").get(60, TimeUnit.SECONDS);
+        ConsumerRecord<Long, String> record5 = ctx.takeOne("orders_with_lines").get(60, TimeUnit.SECONDS);
         String expected5 = """
                 {
                     "id": %d,
@@ -447,7 +456,73 @@ class PurchaseOrderJoinerIT {
                     ]
                 }
                 """.formatted(orderId);
+        assertThat(record5.key()).isEqualTo((long) orderId);
         assertJsonEquals(expected5, record5.value());
+
+        ctx.assertDrained();
+    }
+
+    @Test
+    void shouldHandleDeleteOfOrderWithLines() throws Exception {
+        String jdbcUrl = postgres.getJdbcUrl();
+
+        // TX1: Create order with 2 lines
+        int orderId;
+        int lineId1;
+        int lineId2;
+        try (Connection conn = DriverManager.getConnection(jdbcUrl, "postgres", "postgres");
+             Statement stmt = conn.createStatement()) {
+            conn.setAutoCommit(false);
+            stmt.execute("SET search_path TO inventory");
+            stmt.execute("INSERT INTO orders (order_date, purchaser, shipping_address) " +
+                    "VALUES (CURRENT_DATE, 1004, 'Delete Test Address')");
+            ResultSet rsOrder = stmt.executeQuery("SELECT lastval()");
+            rsOrder.next();
+            orderId = rsOrder.getInt(1);
+
+            stmt.execute("INSERT INTO order_lines (order_id, product_id, quantity, price) VALUES (" + orderId + ", 101, 1, 15.00)");
+            ResultSet rsLine1 = stmt.executeQuery("SELECT lastval()");
+            rsLine1.next();
+            lineId1 = rsLine1.getInt(1);
+
+            stmt.execute("INSERT INTO order_lines (order_id, product_id, quantity, price) VALUES (" + orderId + ", 102, 2, 25.00)");
+            ResultSet rsLine2 = stmt.executeQuery("SELECT lastval()");
+            rsLine2.next();
+            lineId2 = rsLine2.getInt(1);
+
+            conn.commit();
+        }
+
+        // Verify TX1 output
+        ConsumerRecord<Long, String> record1 = ctx.takeOne("orders_with_lines").get(60, TimeUnit.SECONDS);
+        String expected1 = """
+                {
+                    "id": %d,
+                    "purchaser": 1004,
+                    "shippingAddress": "Delete Test Address",
+                    "lines": [
+                        {"productId": 101, "quantity": 1, "price": 15.00},
+                        {"productId": 102, "quantity": 2, "price": 25.00}
+                    ]
+                }
+                """.formatted(orderId);
+        assertThat(record1.key()).isEqualTo((long) orderId);
+        assertJsonEquals(expected1, record1.value());
+
+        // TX2: Delete order lines first (FK constraint), then delete the order
+        try (Connection conn = DriverManager.getConnection(jdbcUrl, "postgres", "postgres");
+             Statement stmt = conn.createStatement()) {
+            conn.setAutoCommit(false);
+            stmt.execute("SET search_path TO inventory");
+            stmt.execute("DELETE FROM order_lines WHERE id IN (" + lineId1 + ", " + lineId2 + ")");
+            stmt.execute("DELETE FROM orders WHERE id = " + orderId);
+            conn.commit();
+        }
+
+        // Verify TX2 output - tombstone (null value) for deleted order
+        ConsumerRecord<Long, String> record2 = ctx.takeOne("orders_with_lines").get(60, TimeUnit.SECONDS);
+        assertThat(record2.key()).as("Tombstone should have the order ID as key").isEqualTo((long) orderId);
+        assertThat(record2.value()).as("Deleted order should emit tombstone (null value)").isNull();
 
         ctx.assertDrained();
     }
