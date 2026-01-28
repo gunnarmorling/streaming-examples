@@ -17,13 +17,16 @@ import java.util.Set;
 import java.util.SortedSet;
 import java.util.TreeSet;
 
+import org.apache.flink.api.common.state.ListStateDescriptor;
 import org.apache.flink.api.common.state.v2.ListState;
-import org.apache.flink.api.common.state.v2.ListStateDescriptor;
+import org.apache.flink.api.common.typeinfo.Types;
 import org.apache.flink.api.common.watermark.LongWatermark;
 import org.apache.flink.datastream.api.function.TwoInputNonBroadcastStreamProcessFunction;
 import org.apache.flink.datastream.impl.extension.join.operators.TwoInputNonBroadcastJoinProcessFunction;
 import org.apache.flink.datastream.impl.operators.KeyedTwoInputNonBroadcastProcessOperator;
 import org.apache.flink.runtime.event.WatermarkEvent;
+import org.apache.flink.runtime.state.StateInitializationContext;
+import org.apache.flink.runtime.state.StateSnapshotContext;
 import org.apache.flink.runtime.state.VoidNamespace;
 import org.apache.flink.runtime.state.VoidNamespaceSerializer;
 import org.apache.flink.streaming.runtime.streamrecord.StreamRecord;
@@ -36,15 +39,21 @@ public class TxAwareTwoInputNonBroadcastJoinProcessOperator<K, V, T_OTHER, OUT> 
 
 	private static final System.Logger LOG = System.getLogger(TxAwareTwoInputNonBroadcastJoinProcessOperator.class.getName());
 
-	private final ListStateDescriptor<V> leftStateDescriptor;
+	private final org.apache.flink.api.common.state.v2.ListStateDescriptor<V> leftStateDescriptor;
 
-    private final ListStateDescriptor<T_OTHER> rightStateDescriptor;
+    private final org.apache.flink.api.common.state.v2.ListStateDescriptor<T_OTHER> rightStateDescriptor;
 
     /** The state that stores the left input records. */
     private transient ListState<V> leftState1;
 
     /** The state that stores the right input records. */
     private transient ListState<T_OTHER> rightState1;
+
+	/** Operator state for checkpointing watermark tracking. */
+	private transient org.apache.flink.api.common.state.ListState<Long> minWatermarkFirstInputState;
+	private transient org.apache.flink.api.common.state.ListState<Long> minWatermarkSecondInputState;
+	private transient org.apache.flink.api.common.state.ListState<Long> minWatermarkState;
+	private transient org.apache.flink.api.common.state.ListState<Long> watermarksToFlushState;
 
 	private long minWatermarkFromFirstInput = -1;
 	private long minWatermarkFromSecondInput = -1;
@@ -56,16 +65,17 @@ public class TxAwareTwoInputNonBroadcastJoinProcessOperator<K, V, T_OTHER, OUT> 
 
 	public TxAwareTwoInputNonBroadcastJoinProcessOperator(
 			TwoInputNonBroadcastStreamProcessFunction<V, T_OTHER, OUT> userFunction,
-			ListStateDescriptor<V> leftStateDescriptor, ListStateDescriptor<T_OTHER> rightStateDescriptor) {
+			org.apache.flink.api.common.state.v2.ListStateDescriptor<V> leftStateDescriptor,
+			org.apache.flink.api.common.state.v2.ListStateDescriptor<T_OTHER> rightStateDescriptor) {
 		super(userFunction);
 
 		this.joinProcessFunction =
                 (TwoInputNonBroadcastJoinProcessFunction<V, T_OTHER, OUT>) userFunction;
 
 		this.leftStateDescriptor =
-                new ListStateDescriptor<>("buffer-left-state", leftStateDescriptor.getTypeInformation());
+                new org.apache.flink.api.common.state.v2.ListStateDescriptor<>("buffer-left-state", leftStateDescriptor.getTypeInformation());
 		this.rightStateDescriptor =
-                new ListStateDescriptor<>("buffer-right-state", rightStateDescriptor.getTypeInformation());
+                new org.apache.flink.api.common.state.v2.ListStateDescriptor<>("buffer-right-state", rightStateDescriptor.getTypeInformation());
 	}
 
 	@Override
@@ -84,6 +94,69 @@ public class TxAwareTwoInputNonBroadcastJoinProcessOperator<K, V, T_OTHER, OUT> 
 						VoidNamespace.INSTANCE,
 						VoidNamespaceSerializer.INSTANCE,
 						rightStateDescriptor);
+	}
+
+	@Override
+	public void initializeState(StateInitializationContext context) throws Exception {
+		super.initializeState(context);
+
+		// Initialize operator state for watermark tracking
+		ListStateDescriptor<Long> firstInputDesc = new ListStateDescriptor<>(
+			"min-watermark-first-input", Types.LONG);
+		ListStateDescriptor<Long> secondInputDesc = new ListStateDescriptor<>(
+			"min-watermark-second-input", Types.LONG);
+		ListStateDescriptor<Long> minWmDesc = new ListStateDescriptor<>(
+			"min-watermark", Types.LONG);
+		ListStateDescriptor<Long> toFlushDesc = new ListStateDescriptor<>(
+			"watermarks-to-flush", Types.LONG);
+
+		minWatermarkFirstInputState = context.getOperatorStateStore()
+			.getListState(firstInputDesc);
+		minWatermarkSecondInputState = context.getOperatorStateStore()
+			.getListState(secondInputDesc);
+		minWatermarkState = context.getOperatorStateStore()
+			.getListState(minWmDesc);
+		watermarksToFlushState = context.getOperatorStateStore()
+			.getListState(toFlushDesc);
+
+		// Restore state on recovery
+		if (context.isRestored()) {
+			for (Long value : minWatermarkFirstInputState.get()) {
+				minWatermarkFromFirstInput = value;
+			}
+			for (Long value : minWatermarkSecondInputState.get()) {
+				minWatermarkFromSecondInput = value;
+			}
+			for (Long value : minWatermarkState.get()) {
+				minWatermark = value;
+			}
+			watermarksToFlush.clear();
+			for (Long value : watermarksToFlushState.get()) {
+				watermarksToFlush.add(value);
+			}
+			LOG.log(Level.INFO, "Restored watermark state: firstInput={0}, secondInput={1}, min={2}, toFlush={3}",
+				minWatermarkFromFirstInput, minWatermarkFromSecondInput, minWatermark, watermarksToFlush.size());
+		}
+	}
+
+	@Override
+	public void snapshotState(StateSnapshotContext context) throws Exception {
+		super.snapshotState(context);
+
+		// Clear and update operator state
+		minWatermarkFirstInputState.clear();
+		minWatermarkFirstInputState.add(minWatermarkFromFirstInput);
+
+		minWatermarkSecondInputState.clear();
+		minWatermarkSecondInputState.add(minWatermarkFromSecondInput);
+
+		minWatermarkState.clear();
+		minWatermarkState.add(minWatermark);
+
+		watermarksToFlushState.clear();
+		for (Long wm : watermarksToFlush) {
+			watermarksToFlushState.add(wm);
+		}
 	}
 
 	@Override
