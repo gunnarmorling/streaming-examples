@@ -108,6 +108,8 @@ public class WatermarkInjector implements TwoInputBroadcastStreamProcessFunction
 			TransactionEvent next = it.next();
 			if (next.commitLsn() < currentWatermark) {
 				it.remove();
+				// Clean up counts state - this commitLsn has passed the watermark
+				ctx.getStateManager().getState(COUNTS_STATE).remove(next.commitLsn());
 				continue;
 			}
 

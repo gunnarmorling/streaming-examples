@@ -232,11 +232,7 @@ public class TxAwareTwoInputNonBroadcastJoinProcessOperator<K, V, T_OTHER, OUT> 
 			LOG.log(Level.DEBUG, "Keys: {0}", keys);
 
 			for (Object key : keys) {
-				try {
-					setAsyncKeyedContextElement(new StreamRecord<Long>((Long) key), r -> r);
-				} catch (Exception e) {
-					e.printStackTrace();
-				}
+				setAsyncKeyedContextElement(new StreamRecord<Long>((Long) key), r -> r);
 
 				V leftChanged = getLeftByCommitLsn(toFlush);
 				if (leftChanged != null) {
@@ -247,13 +243,9 @@ public class TxAwareTwoInputNonBroadcastJoinProcessOperator<K, V, T_OTHER, OUT> 
 					V leftRecord = element.getValue();
 
 					for (Entry<Long, DataChangeEvent> right : latestRightPerIdByCommitLsn.entrySet()) {
-						try {
-							joinProcessFunction
-								.getJoinFunction()
-								.processRecord(leftRecord, (T_OTHER) right.getValue(), collector, partitionedContext);
-						} catch (Exception e) {
-							e.printStackTrace();
-						}
+						joinProcessFunction
+							.getJoinFunction()
+							.processRecord(leftRecord, (T_OTHER) right.getValue(), collector, partitionedContext);
 					}
 				}
 				else {
@@ -264,13 +256,9 @@ public class TxAwareTwoInputNonBroadcastJoinProcessOperator<K, V, T_OTHER, OUT> 
 						StreamRecord<T_OTHER> element = new StreamRecord<T_OTHER>((T_OTHER)right.getValue());
 						collector.setTimestampFromStreamRecord(element);
 
-						try {
-							joinProcessFunction
-								.getJoinFunction()
-								.processRecord(left, element.getValue(), collector, partitionedContext);
-						} catch (Exception e) {
-							e.printStackTrace();
-						}
+						joinProcessFunction
+							.getJoinFunction()
+							.processRecord(left, element.getValue(), collector, partitionedContext);
 					}
 				}
 			}

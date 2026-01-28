@@ -67,6 +67,8 @@ public record OrderWithLines(long id, LocalDate orderDate, int purchaser, String
 		if (changeEventPair.left().op().equals("c") || changeEventPair.left().op().equals("r") || changeEventPair.left().op().equals("u")) {
 			Map<String, Object> order = changeEventPair.left().after();
 
+			Map<Integer, OrderLine> linesById = new HashMap<>(this.linesById);
+
 			if (changeEventPair.right().op().equals("c") || changeEventPair.right().op().equals("r") || changeEventPair.right().op().equals("u")) {
 				OrderLine line = OrderLine.fromDataChangeEvent(changeEventPair.right());
 				linesById.put(line.id(), line);
@@ -92,7 +94,7 @@ public record OrderWithLines(long id, LocalDate orderDate, int purchaser, String
 					orderDate,
 					purchaser,
 					shippingAddress,
-					linesById,
+					new HashMap<>(linesById),
 					changeEventPair.commitLsn(),
 					true);
 		}
